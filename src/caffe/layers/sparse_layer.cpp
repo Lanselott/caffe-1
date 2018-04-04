@@ -1,5 +1,5 @@
 #include <vector>
-
+#include <omp.h>
 #include "caffe/layers/sparse_layer.hpp"
 //#include "caffe/util/winograd.hpp"
 
@@ -93,7 +93,7 @@ LOG(INFO)<<"check point 0";
 this->forward_cpu_gemm_ccnmm_merge(bottom_data, weight,
     xs_data , 0, bottom);
 //LOG(INFO)<<"xu top: "<<
-//#pragma omp parallel for
+#pragma omp parallel for
     for (int n = 0; n < this->num_; ++n) { // JSP: this->num_ is batch size
       //calculate xu,xuv together
 
