@@ -177,7 +177,7 @@ message SolverParameter {
   // regularization types supported: L1 and L2
   // controlled by weight_decay
   optional string regularization_type = 29 [default = "L2"];
-  
+
   // The directions of gradients by force regularization
   // "all": the exact gradients derivatived by force regularization
   // "same": only gradients (which have the same directions with error gradients) are used.
@@ -188,12 +188,12 @@ message SolverParameter {
   //             In this case, length1=force_decay*length2
   optional string force_decay_type = 44 [default = "fixed"];
   // The strength/decay of force regularization.
-  optional float force_decay = 42 [default = 0.0]; 
+  optional float force_decay = 42 [default = 0.0];
   // Type of force regularization - Gravity, Linear, Constant, Degradation
   optional string force_type = 41 [default = "Degradation"];
   // The iterations after which force_decay will be set to zero.
-  optional int32 force_iter = 43 [default = -1]; 
-    
+  optional int32 force_iter = 43 [default = -1];
+
   // the stepsize for learning rate policy "step"
   optional int32 stepsize = 13;
   // the stepsize for learning rate policy "multistep"
@@ -228,7 +228,7 @@ message SolverParameter {
 
   // type of the solver
   optional string type = 40 [default = "SGD"];
-  
+
   // numerical stability for RMSProp, AdaGrad and AdaDelta and Adam
   optional float delta = 31 [default = 1e-8];
   // parameters for the Adam solver
@@ -256,7 +256,7 @@ message SolverParameter {
   }
   // DEPRECATED: use type instead of solver_type
   optional SolverType solver_type = 30 [default = SGD];
-  
+
 }
 
 // A message that stores the solver snapshots
@@ -326,10 +326,10 @@ message ParamSpec {
 
   // The multiplier on the global weight decay for this parameter.
   optional float decay_mult = 4 [default = 1.0];
-  
+
   // The multiplier on the global force decay for this parameter.
   optional float force_mult = 6 [default = 0.0];
-  
+
   // DEPRECATED The force regularization on 2D
   optional ForceRegular force_regularize = 5;
 }
@@ -376,7 +376,7 @@ message LayerParameter {
   // included/excluded.
   repeated NetStateRule include = 8;
   repeated NetStateRule exclude = 9;
-  
+
   // Display info
   optional bool display = 12 [default = false];
 
@@ -439,6 +439,8 @@ message LayerParameter {
   optional WindowDataParameter window_data_param = 129;
   optional SparsifyParameter sparsify_param = 147;
   optional SymmetricRectifyParameter symmetric_rectify_param = 148;
+  optional SparseLayerParameter sparse_param = 149;
+
 }
 
 // Message that stores parameters used to apply transformation
@@ -493,6 +495,10 @@ message LossParameter {
 
 // Messages that store parameters used by individual layer types follow, in
 // alphabetical order.
+
+message SparseLayerParameter {
+  optional float step = 1 [default = 1];
+}
 
 message AccuracyParameter {
   // When computing accuracy, count as correct by comparing the true label to
@@ -640,6 +646,18 @@ message ConvolutionParameter {
   // implementation; for input blobs with num_axes != 2, this option is
   // ignored and the ND implementation will be used.)
   optional bool force_nd_im2col = 17 [default = false];
+
+  enum ConvMode {
+    LOWERED_GEMM = 0;   //gemm on lowered tensors
+    LOWERED_CCNMM = 1;  //removing all-zero rows & columns and ConCateNating remaining ones, then gemm on lowered tensors
+    DIRECT_SCONV = 2;  //direct convolution on tensors without lowering, harnessing sparsity
+    DIRECT_DCONV = 3;  //direct convolution on tensors without lowering, dense format
+  }
+  optional ConvMode conv_mode = 21 [default = LOWERED_GEMM];
+  optional bool dump_parameter = 22 [default = false];
+  optional bool dump_activation = 23 [default = false];
+  optional bool parameter_sparsity_pattern_histogram = 24 [default = false];
+
 }
 
 message CropParameter {
@@ -1035,11 +1053,11 @@ message SparsifyParameter {
   // To zerout small activations
   // Recommendation: Use SymmetricRectifyLayer in the front and set thre = 0
   optional float thre = 1 [default = 0];
-  
+
   // For Backward: The decay coefficient of inputs (e.g. the feature maps from previous the conv layer)
   // To learn sparse inputs (e.g. sparse representations)
   optional float coef = 2 [default = 0];
-  
+
 }
 
 message ReshapeParameter {
@@ -1341,6 +1359,8 @@ message V1LayerParameter {
   optional TransformationParameter transform_param = 36;
   optional LossParameter loss_param = 42;
   optional V0LayerParameter layer = 1;
+  optional SparseLayerParameter sparse_param = 43;
+
 }
 
 // DEPRECATED: V0LayerParameter is the old way of specifying layer parameters

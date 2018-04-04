@@ -32,6 +32,23 @@ void caffe_cpu_gemm<double>(const CBLAS_TRANSPOSE TransA,
 }
 
 template <>
+void caffe_cpu_cblas_gemm<float>(const int M, const int N, const int K,
+    const float alpha, const float* A, const int lda, const float* B, const int ldb, const float beta,
+    float* C, const int ldc){
+	cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, N, K, alpha, A, lda, B,
+	      ldb, beta, C, ldc);
+}
+
+template <>
+void caffe_cpu_cblas_gemm<double>(const int M, const int N, const int K,
+    const double alpha, const double* A, const int lda, const double* B, const int ldb, const double beta,
+    double* C, const int ldc){
+	cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, N, K, alpha, A, lda, B,
+	      ldb, beta, C, ldc);
+}
+
+
+template <>
 void caffe_cpu_gemv<float>(const CBLAS_TRANSPOSE TransA, const int M,
     const int N, const float alpha, const float* A, const float* x,
     const float beta, float* y) {
@@ -384,5 +401,57 @@ void caffe_cpu_scale<double>(const int n, const double alpha, const double *x,
   cblas_dcopy(n, x, 1, y, 1);
   cblas_dscal(n, alpha, y, 1);
 }
+
+template <typename Dtype>
+void caffe_cpu_if_all_zero(const int M, const int N, const Dtype *x, int* y, bool dimen){
+	if(dimen){//along columns
+		for(int col=0; col<N; ++col){
+			y[col]=true;
+			for(int row=0; row<M; row++){
+				if(x[col+row*N]!=0){
+					y[col] = false;
+					break;
+				}
+			}
+		}
+	}else{//along rows
+		for(int row=0; row<M; ++row){
+			y[row]=true;
+			for(int col=0; col<N; col++){
+				if(x[col+row*N]!=0){
+					y[row] = false;
+					break;
+				}
+			}
+		}
+	}
+}
+template
+void caffe_cpu_if_all_zero(const int M, const int N, const float *x, int* y, bool dimen);
+template
+void caffe_cpu_if_all_zero(const int M, const int N, const double *x, int* y, bool dimen);
+
+template <typename Dtype>
+void caffe_cpu_del_zero_cols(const int M, const int N, const Dtype *x, Dtype *y, int * left_cols, const int* mask){
+	int dst_col = 0;
+	for(int row=0; row<M; row++){
+		dst_col = 0;
+		for(int src_col=0; src_col<N; src_col++){
+			if(!mask[src_col]){
+				//if(src_col!=dst_col){
+				//	x[row*N+dst_col] = x[row*N+src_col];
+				//}
+				y[row*N+dst_col] = x[row*N+src_col];
+				dst_col++;
+			}
+		}
+	}
+	*left_cols = dst_col;
+}
+template
+void  caffe_cpu_del_zero_cols<float>(const int M, const int N, const float *x, float *y, int * left_cols, const int* mask);
+template
+void  caffe_cpu_del_zero_cols<double>(const int M, const int N, const double *x, double *y, int * left_cols, const int* mask);
+
 
 }  // namespace caffe

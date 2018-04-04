@@ -29,6 +29,13 @@ class BaseConvolutionLayer : public Layer<Dtype> {
   virtual inline bool EqualNumBottomTopBlobs() const { return true; }
 
  protected:
+
+ void forward_cpu_gemm_ccnmm_merge(const Dtype* input,const Dtype* weights,
+     Dtype* output, int batch_idx, const vector<Blob<Dtype>*>& bottom,
+       bool skip_im2col = false);
+ void forward_cpu_gemm_xu_xuv(const Dtype* input,Dtype* input2, const Dtype* weights,const Dtype* weights2,
+     Dtype* output, Dtype* output2, int batch_idx,const vector<Blob<Dtype>*>& bottom, bool skip_im2col = false);
+
   // Helper functions that abstract away the column buffer and gemm arguments.
   // The last argument in forward_cpu_gemm is so that we can skip the im2col if
   // we just called weight_cpu_gemm with the same input.
@@ -74,8 +81,19 @@ class BaseConvolutionLayer : public Layer<Dtype> {
   Blob<int> conv_input_shape_;
   /// @brief The spatial dimensions of the col_buffer.
   vector<int> col_buffer_shape_;
+  vector<int> col_buffer_shape_xu;
+  vector<int> col_buffer_shape_xuv;
+  vector<int> col_buffer_shape_csrmm;
+  /// @brief The spatial dimensions of the output.
+  vector<int>col_buffer_shape_ccnmm;
   /// @brief The spatial dimensions of the output.
   vector<int> output_shape_;
+  vector<int> xu_shape_;
+  vector<int> xuv_shape_;
+  //buffer for step = 3
+  Blob<Dtype> xu_buffer_;
+  Blob<Dtype> xuv_buffer_;
+  Blob<Dtype> xs_buffer_;
   const vector<int>* bottom_shape_;
 
   int num_spatial_axes_;
@@ -94,15 +112,75 @@ class BaseConvolutionLayer : public Layer<Dtype> {
   bool force_nd_im2col_;
 
  private:
+   //TODO: the parameter of kernel v should be read from prototxt, should be fixed later
+   inline void conv_im2col_cpu_xuv(const Dtype* data, Dtype* col_buff,int* all_zero_mask = NULL) {
+
+     if (!force_nd_im2col_ && num_spatial_axes_ == 2) {
+       im2col_cpu(data, conv_in_channels_,
+           conv_input_shape_.cpu_data()[1], conv_input_shape_.cpu_data()[2],
+           1, 1,
+           0, 0,
+           stride_.cpu_data()[0], stride_.cpu_data()[1],
+           dilation_.cpu_data()[0], dilation_.cpu_data()[1], col_buff,
+           all_zero_mask);
+     } else {
+       // JSP: FIXME - parallelization over multiple inputs in a batch probably
+       // won't work for this code path
+       im2col_nd_cpu(data, num_spatial_axes_, conv_input_shape_.cpu_data(),
+           col_buffer_shape_.data(), kernel_shape_.cpu_data(),
+           pad_.cpu_data(), stride_.cpu_data(), dilation_.cpu_data(), col_buff);
+     }
+   }
+
+   inline void conv_im2col_cpu_xuv_nc(Dtype* data, Dtype* col_buff,int* all_zero_mask = NULL) {
+
+     if (!force_nd_im2col_ && num_spatial_axes_ == 2) {
+       im2col_cpu(data, conv_in_channels_,
+           conv_input_shape_.cpu_data()[1], conv_input_shape_.cpu_data()[2],
+           1, 1,
+           0, 0,
+           stride_.cpu_data()[0], stride_.cpu_data()[1],
+           dilation_.cpu_data()[0], dilation_.cpu_data()[1], col_buff,
+           all_zero_mask);
+     } else {
+       // JSP: FIXME - parallelization over multiple inputs in a batch probably
+       // won't work for this code path
+       im2col_nd_cpu(data, num_spatial_axes_, conv_input_shape_.cpu_data(),
+           col_buffer_shape_.data(), kernel_shape_.cpu_data(),
+           pad_.cpu_data(), stride_.cpu_data(), dilation_.cpu_data(), col_buff);
+     }
+   }
+
+
+   inline void conv_im2col_cpu_xu(const Dtype* data, Dtype* col_buff,int* all_zero_mask = NULL) {
+
+     if (!force_nd_im2col_ && num_spatial_axes_ == 2) {
+    //   LOG(INFO)<<"kernel parameter: "<< stride_.cpu_data()[0]<<","<< stride_.cpu_data()[1]<<","<<
+        //dilation_.cpu_data()[0]<<","<<dilation_.cpu_data()[1];
+       im2col_cpu(data, conv_in_channels_,
+           conv_input_shape_.cpu_data()[1], conv_input_shape_.cpu_data()[2],
+           kernel_shape_.cpu_data()[0], kernel_shape_.cpu_data()[1],
+           pad_.cpu_data()[0], pad_.cpu_data()[1],
+           stride_.cpu_data()[0], stride_.cpu_data()[1],
+           dilation_.cpu_data()[0], dilation_.cpu_data()[1], col_buff,
+           all_zero_mask);
+     } else {
+       // JSP: FIXME - parallelization over multiple inputs in a batch probably
+       // won't work for this code path
+       im2col_nd_cpu(data, num_spatial_axes_, conv_input_shape_.cpu_data(),
+           col_buffer_shape_.data(), kernel_shape_.cpu_data(),
+           pad_.cpu_data(), stride_.cpu_data(), dilation_.cpu_data(), col_buff);
+     }
+   }
   // wrap im2col/col2im so we don't have to remember the (long) argument lists
-  inline void conv_im2col_cpu(const Dtype* data, Dtype* col_buff) {
+  inline void conv_im2col_cpu(const Dtype* data, Dtype* col_buff,int* all_zero_mask = NULL) {
     if (!force_nd_im2col_ && num_spatial_axes_ == 2) {
       im2col_cpu(data, conv_in_channels_,
           conv_input_shape_.cpu_data()[1], conv_input_shape_.cpu_data()[2],
           kernel_shape_.cpu_data()[0], kernel_shape_.cpu_data()[1],
           pad_.cpu_data()[0], pad_.cpu_data()[1],
           stride_.cpu_data()[0], stride_.cpu_data()[1],
-          dilation_.cpu_data()[0], dilation_.cpu_data()[1], col_buff);
+          dilation_.cpu_data()[0], dilation_.cpu_data()[1], col_buff,all_zero_mask);
     } else {
       im2col_nd_cpu(data, num_spatial_axes_, conv_input_shape_.cpu_data(),
           col_buffer_shape_.data(), kernel_shape_.cpu_data(),
@@ -156,6 +234,15 @@ class BaseConvolutionLayer : public Layer<Dtype> {
   }
 #endif
 
+Blob<Dtype> nz_weight_values_;//nonzero elements
+Blob<int> nz_weight_indices_;//index of nonzero
+Blob<int> nz_weight_index_pointers_;//pointer(index) of indices
+bool is_concatenating_weights_features_; //if use concatenation scheme to compress dense weights and features together
+Blob<int> dense_feature_map_mask_;//to skip all zero rows in col_buffer_
+Blob<int> nz_per_row_;//nonzero per row for cusparse
+vector<int> nz_num_;//the number of nonzero for cusparse
+
+
   int num_kernels_im2col_;
   int num_kernels_col2im_;
   int conv_out_channels_;
@@ -165,8 +252,26 @@ class BaseConvolutionLayer : public Layer<Dtype> {
   int col_offset_;
   int output_offset_;
 
+  int initial_check;
+  Blob<Dtype> transposed_output_buffer_;
+
+  Dtype step;
+  Blob<int> col_buf_mask_;
+  Blob<int> col_buf_mask_ccnmm;
+  Blob<int> row_buf_mask_ccnmm;
+  vector<int> left_columns_;//the number of left columns of weight matrix for each group
+  vector<int> left_rows_; //the number of left rows of weight matrix for each group
+  Blob<Dtype> squeezed_weight_buffer_;
+  Blob<Dtype> squeezed_weight_buffer_ccnmm;
+
+
   Blob<Dtype> col_buffer_;
   Blob<Dtype> bias_multiplier_;
+  Blob<Dtype> col_buffer_csrmm;
+  Blob<Dtype> col_buffer_ccnmm;
+  //for step = 3
+  Blob<Dtype> col_buffer_xu;
+  Blob<Dtype> col_buffer_xuv;
 };
 
 }  // namespace caffe
