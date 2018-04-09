@@ -31,6 +31,8 @@ template <typename Dtype>
 void SparseLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   step = this->layer_param_.sparse_param().step();
+//  int mkl_max_threads_saved = mkl_get_max_threads();
+  mkl_set_num_threads(8);
   //LOG(INFO)<<"STEP CHECKING: "<<step;
 /*
   int height = this->conv_input_shape_.cpu_data()[1];
@@ -45,10 +47,7 @@ void SparseLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   int dilation_w = this->dilation_.cpu_data()[1];
 */
   const Dtype* weight = this->blobs_[0]->cpu_data();
-  const Dtype *bias = NULL;
-  if (this->bias_term_) {
-    bias = this->blobs_[1]->cpu_data();
-  }
+
   //LOG(INFO)<<"BIAS shape in sparse"<<counter;
 
   // JSP: by some reason, if nested omp parallelism is used for MKL, I get a wrong results.
@@ -93,31 +92,31 @@ LOG(INFO)<<"check point 0";
 this->forward_cpu_gemm_ccnmm_merge(bottom_data, weight,
     xs_data , 0, bottom);
 //LOG(INFO)<<"xu top: "<<
-#pragma omp parallel for
+//#pragma omp parallel for
     for (int n = 0; n < this->num_; ++n) { // JSP: this->num_ is batch size
       //calculate xu,xuv together
+  #pragma omp parallel sections num_threads(1)
+  {
+    //#pragma omp section
 
       this->forward_cpu_gemm_xu_xuv(bottom_data + n * this->bottom_dim_,xu_data + n * xu_dim_,
       u,v,xu_data + n * xu_dim_, xuv_data + n * xuv_dim_,n,bottom);
+//LOG(INFO)<<"batch: "<<n;
 
-      //xu
-      //this->forward_cpu_gemm_xu(bottom_data + n * this->bottom_dim_, u,
-    //  xu_data + n * xu_dim_, n,bottom);
-      //xuv
-    //  this->forward_cpu_gemm_xuv(xu_data + n * xu_dim_, v, xuv_data + n * xuv_dim_, n,bottom);
-      //this->forward_cpu_gemm_xuv(xu_data + n * xu_dim_, v, top_data + n * top_dim_, n,bottom);
-      //xs
-//    }
-//#pragma omp parallel for
-  //for (int n = 0; n < this->num_; ++n) {
+#pragma omp section
+
     if(n!=0) this->forward_cpu_gemm_ccnmm_merge(bottom_data + n * this->bottom_dim_, weight,
                 xs_data + n * xs_dim_, n, bottom);
+#pragma omp section
       // (xuv)+(xs)
       if (this->bias_term_) {
         // bias term is fused with direct convolution for second layer
+        const Dtype* bias = this->blobs_[1]->cpu_data();
         this->forward_cpu_bias(top_data + n * this->top_dim_, bias);
       }
+      }
     }
+
 /*
 #pragma omp parallel for
     for (int n = 0; n < this->num_; ++n) {
@@ -130,7 +129,7 @@ this->forward_cpu_gemm_ccnmm_merge(bottom_data, weight,
     */
     caffe_axpy(top_count,alpha, xuv, xs_data );
 
-    caffe_copy(top_count,xs,top[0]->mutable_cpu_data());
+    caffe_copy(top_count,xs,top_data);
 
 
 

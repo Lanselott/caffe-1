@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <vector>
+#include <omp.h>
 
 #include "caffe/filler.hpp"
 #include "caffe/layers/base_conv_layer.hpp"
@@ -552,17 +553,8 @@ LOG(INFO)<<"****inital_check****";
 
         col_buff = /*col_buffer_ccnmm.*/col_buffer_.cpu_data() + offset;
 
-        //TODO: need to rewrite the col_buffer_.cpu_data() here
-  /*@@@@@@@@@@@@@@@@@@@@@*/
-
-
-
-
-
-
       //===========================calculate=====================================//
-        //LOG(INFO)<<"start LOWERED_CCNMM";
-    //  LOG(INFO)<<"initial_check:"<<initial_check;
+
 
     /*
       parameter info:
@@ -576,8 +568,6 @@ LOG(INFO)<<"****inital_check****";
           left_cols = left_columns_[g];
         //  LOG(INFO)<<left_cols;
         //  LOG(INFO)<<"after start,before gemm";
-      //  LOG(INFO)<<"top[1]->shape(1):"<<top[1]->shape(1)<<"this->blobs_[0]->shape(0):"<<this->blobs_[0]->shape(0);
-
 
         caffe_cpu_cblas_gemm(xs_buffer_.shape(1) /
   				  group_, xs_buffer_.count(2), left_cols,

@@ -111,7 +111,29 @@ class BaseConvolutionLayer : public Layer<Dtype> {
   bool is_1x1_;
   bool force_nd_im2col_;
 
- private:
+  int initial_check;
+  Blob<Dtype> transposed_output_buffer_;
+
+  Dtype step;
+  Blob<int> col_buf_mask_;
+  Blob<int> col_buf_mask_ccnmm;
+  Blob<int> row_buf_mask_ccnmm;
+  vector<int> left_columns_;//the number of left columns of weight matrix for each group
+  vector<int> left_rows_; //the number of left rows of weight matrix for each group
+  Blob<Dtype> squeezed_weight_buffer_;
+  Blob<Dtype> squeezed_weight_buffer_ccnmm;
+
+
+  Blob<Dtype> col_buffer_;
+  Blob<Dtype> bias_multiplier_;
+  Blob<Dtype> col_buffer_csrmm;
+  Blob<Dtype> col_buffer_ccnmm;
+  //for step = 3
+  Blob<Dtype> col_buffer_xu;
+  Blob<Dtype> col_buffer_xuv;
+
+ //private:
+protected:
    //TODO: the parameter of kernel v should be read from prototxt, should be fixed later
    inline void conv_im2col_cpu_xuv(const Dtype* data, Dtype* col_buff,int* all_zero_mask = NULL) {
 
@@ -252,26 +274,6 @@ vector<int> nz_num_;//the number of nonzero for cusparse
   int col_offset_;
   int output_offset_;
 
-  int initial_check;
-  Blob<Dtype> transposed_output_buffer_;
-
-  Dtype step;
-  Blob<int> col_buf_mask_;
-  Blob<int> col_buf_mask_ccnmm;
-  Blob<int> row_buf_mask_ccnmm;
-  vector<int> left_columns_;//the number of left columns of weight matrix for each group
-  vector<int> left_rows_; //the number of left rows of weight matrix for each group
-  Blob<Dtype> squeezed_weight_buffer_;
-  Blob<Dtype> squeezed_weight_buffer_ccnmm;
-
-
-  Blob<Dtype> col_buffer_;
-  Blob<Dtype> bias_multiplier_;
-  Blob<Dtype> col_buffer_csrmm;
-  Blob<Dtype> col_buffer_ccnmm;
-  //for step = 3
-  Blob<Dtype> col_buffer_xu;
-  Blob<Dtype> col_buffer_xuv;
 };
 
 }  // namespace caffe
